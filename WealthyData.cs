@@ -40,6 +40,7 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
             if (ImGui.Button("Add Dataset"))
             {
                 Settings.DataSets.Add(new DataSet());
+                Settings.LastSelectedIndex = Settings.DataSets.Count-1;
             }
 
             if (Settings.DataSets.Count != 0)
@@ -167,8 +168,8 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
 
             ImGui.TableNextColumn();
 
-            var enabled = "Allflamed";
-            var disabled = "Regular";
+            var enabled = "Wealthy           ";
+            var disabled = "Poor";
             var label = pack.AllFlameApplied
                 ? enabled
                 : disabled.PadRight(enabled.Length);
