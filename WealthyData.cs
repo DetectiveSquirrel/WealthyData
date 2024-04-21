@@ -1,12 +1,15 @@
 ﻿using ExileCore;
 using ExileCore.PoEMemory.Components;
 using ExileCore.PoEMemory.Elements.Necropolis;
+using ExileCore.PoEMemory.FilesInMemory;
+using ExileCore.Shared.Enums;
 using ImGuiNET;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Text;
+using static ExileCore.PoEMemory.FilesInMemory.ModsDat;
 
 namespace WealthyData;
 
@@ -40,7 +43,7 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
             if (ImGui.Button("Add Dataset"))
             {
                 Settings.DataSets.Add(new DataSet());
-                Settings.LastSelectedIndex = Settings.DataSets.Count-1;
+                Settings.LastSelectedIndex = Settings.DataSets.Count - 1;
             }
 
             if (Settings.DataSets.Count != 0)
@@ -65,6 +68,12 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
         {
             if (Settings.DataSets.Count > Settings.LastSelectedIndex && Settings.LastSelectedIndex > -1)
             {
+                ImGui.SeparatorText("Globals");
+                var refDevotionBonus = Settings.DevotionModPctBonus;
+                ImGui.InputInt("Global Devotion Bonus %", ref refDevotionBonus);
+                Settings.DevotionModPctBonus = refDevotionBonus;
+
+                ImGui.SeparatorText("Data Set");
                 var refCheck = Settings.DataSets[Settings.LastSelectedIndex].LockedData;
                 if (ImGui.Checkbox("Lock Dataset", ref refCheck))
                 {
@@ -127,17 +136,9 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
         ImGui.TableSetupColumn($"({currentDataset.Packs.Count})");
         ImGui.TableSetupColumn("Pack Size", ImGuiTableColumnFlags.None, 150);
         ImGui.TableSetupColumn($"All Flames Applied ({currentDataset.Packs.Count(x => x.AllFlameApplied)})");
-        ImGui.TableSetupColumn(new StringBuilder()
-                .Append("MonsterType (H-")
-                .Append(currentDataset.Packs.Count(x => x.MonsterType == MonsterType.High))
-                .Append(", N-")
-                .Append(currentDataset.Packs.Count(x => x.MonsterType == MonsterType.Normal))
-                .Append(", L-")
-                .Append(currentDataset.Packs.Count(x => x.MonsterType == MonsterType.Low))
-                .Append(", VL-")
-                .Append(currentDataset.Packs.Count(x => x.MonsterType == MonsterType.VeryLow))
-                .Append(")")
-                .ToString(),
+        ImGui.TableSetupColumn(new StringBuilder().Append("MonsterType (H-").Append(currentDataset.Packs.Count(x => x.MonsterType == MonsterType.High)).Append(", N-")
+                .Append(currentDataset.Packs.Count(x => x.MonsterType == MonsterType.Normal)).Append(", L-").Append(currentDataset.Packs.Count(x => x.MonsterType == MonsterType.Low)).Append(", VL-")
+                .Append(currentDataset.Packs.Count(x => x.MonsterType == MonsterType.VeryLow)).Append(")").ToString(),
             ImGuiTableColumnFlags.WidthStretch);
 
         ImGui.TableHeadersRow();
@@ -159,11 +160,11 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
             var usableSpace = ImGui.GetContentRegionAvail();
             ImGui.SetNextItemWidth(usableSpace.X);
 
-            var refFloat = pack.PackSizeModifier;
-            ImGui.InputFloat("", ref refFloat);
+            var reftDouble = pack.PackSizeModifier;
+            ImGui.InputDouble("", ref reftDouble);
             if (!currentDataset.LockedData)
             {
-                pack.PackSizeModifier = refFloat;
+                pack.PackSizeModifier = reftDouble;
             }
 
             ImGui.TableNextColumn();
@@ -261,25 +262,91 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
         }
     }
 
+    public static IReadOnlyDictionary<GameStat, int> SumModStats(IEnumerable<ModRecord> mods)
+    {
+        return new DefaultDictionary<GameStat, int>(mods.SelectMany(x => x.StatNames.Zip(x.StatRange, (name, value) => (name.MatchingStat, value)))
+                .GroupBy(x => x.MatchingStat, x => x.value.Min, (stat, values) => (stat, values.Sum())).ToDictionary(x => x.stat, x => x.Item2),
+            0);
+    }
+
     private void GetModelLists(NecropolisMonsterPanel necropolisTransitionWindow, out List<PackData> mods)
     {
-        var associations = necropolisTransitionWindow.Associations;
+        var associations = necropolisTransitionWindow.AssociationsWithMods;
         mods = new List<PackData>();
         for (var i = 0; i < associations.Count; i++)
         {
-            var t = associations[i];
-            var monsterModel = ConvertElementToMonster(associations.ElementAtOrDefault(i));
+            var monsterModel = ConvertElementToMonster(associations.ElementAtOrDefault(i).Association);
+
+            LogMessage($"associations.ElementAtOrDefault({i})");
             if (monsterModel == null) continue;
             var item = new PackData
             {
                 AllFlameApplied = monsterModel.Name == "Tumbling Wealth",
                 MonsterType = monsterModel.Density,
-                PackSizeModifier = monsterModel.PackSize
+                PackSizeModifier = CalculatePackSize(SumModStats(associations.ElementAtOrDefault(i).Mod != null
+                        ? [GetDiffTieredMod(associations.ElementAtOrDefault(i).Mod, monsterModel.TierChange)]
+                        : new List<ModRecord>())[GameStat.PackSizePct],
+                    Settings.DevotionModPctBonus,
+                    monsterModel.PackSize)
             };
 
             mods.Add(item);
         }
     }
+
+    public ModRecord GetDiffTieredMod(ModRecord modKey, int tierChange)
+    {
+        var necropolisPackMods = GameController.Files.NecropolisPackMods;
+        if (necropolisPackMods == null || necropolisPackMods.Address == 0 || !necropolisPackMods.EntriesList.Any())
+        {
+            Main.GameController.Game.ReloadFiles();
+        }
+
+        var modRecord = necropolisPackMods?.EntriesList.FirstOrDefault(x => x.Mod.Key == modKey.Key);
+        if (modRecord == null)
+        {
+            return modKey;
+        }
+
+        return tierChange switch
+        {
+            -1 => GetLowerTierMod(necropolisPackMods, modRecord),
+            1 => modRecord.Upgrade?.Mod ?? modRecord.Mod,
+            0 => modRecord.Mod,
+            _ => modRecord.Mod
+        };
+    }
+
+    private ModRecord GetLowerTierMod(UniversalFileWrapper<NecropolisPackMod> necroPackMods, NecropolisPackMod currentModRecord)
+    {
+        var lowestTierId = GetLowestTierId(necroPackMods, currentModRecord.Mod.Group);
+        if (!int.TryParse(currentModRecord.Tier.Id, out var currentModValue) || currentModValue == lowestTierId)
+        {
+            return currentModRecord.Mod;
+        }
+
+        var desiredModValue = currentModValue - 1;
+        foreach (var modEntry in necroPackMods.EntriesList)
+        {
+            if (modEntry.Mod.Key != currentModRecord.Mod.Key && modEntry.Mod.Group == currentModRecord.Mod.Group && int.TryParse(modEntry.Tier.Id, out var newModValue) &&
+                newModValue == desiredModValue)
+            {
+                LogMessage($"Grabbed Lower tier mod for {currentModRecord.Mod.Key} => {modEntry.Mod.Key}");
+                return modEntry.Mod;
+            }
+        }
+
+        return currentModRecord.Mod;
+    }
+
+    private int GetLowestTierId(UniversalFileWrapper<NecropolisPackMod> necroPackMods, string group)
+    {
+        return necroPackMods.EntriesList.Where(m => m.Mod.Group == group).Select(m => int.TryParse(m.Tier.Id, out var tierId)
+            ? tierId
+            : int.MaxValue).Min();
+    }
+
+    public double CalculatePackSize(double increasedPct, int devotionBonus, double moreOrLessPct) => 1.0 * moreOrLessPct * (1 + 0.01 * increasedPct * (1 + 0.01 * devotionBonus));
 
     public MonsterModel ConvertElementToMonster(NecropolisMonsterPanelMonsterAssociation element)
     {
@@ -288,12 +355,11 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
         var model = new MonsterModel();
         model.MonsterAssociation = element;
 
-        Main.LogMessage($"element.Pack.Name = \"{element.GetChildFromIndices(0, 2, 0).Text}\"", 10);
+        //Main.LogMessage($"element.Pack.Name = \"{element.GetChildFromIndices(0, 2, 0).Text}\"", 10);
         model.Name = element.GetChildFromIndices(0, 2, 0).Text;
 
         if (element.PackFrequency == null)
         {
-            Main.GameController.Area.ForceRefreshArea(false);
             Main.GameController.Game.ReloadFiles();
         }
 
@@ -311,13 +377,18 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
             if (tooltipText.Contains("50% less Pack Size", StringComparison.CurrentCultureIgnoreCase))
             {
                 model.PackSize = 0.5f;
-                break;
             }
-
-            if (tooltipText.Contains("50% more Pack Size"))
+            else if (tooltipText.Contains("50% more Pack Size"))
             {
                 model.PackSize = 1.5f;
-                break;
+            }
+            else if (tooltipText.Contains("+1"))
+            {
+                model.TierChange = 1;
+            }
+            else if (tooltipText.Contains("-1"))
+            {
+                model.TierChange = -1;
             }
         }
 

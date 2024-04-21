@@ -7,13 +7,14 @@ public class MonsterModel
 {
     public string Name { get; set; } = "NoName";
     public float PackSize { get; set; } = 1.0f;
+    public int TierChange { get; set; } = 0;
     public WealthyData.MonsterType Density { get; set; } = WealthyData.MonsterType.Normal;
 
     public NecropolisMonsterPanelMonsterAssociation MonsterAssociation { get; set; }
 
     public static WealthyData.MonsterType MonsterDensityFromId(string str)
     {
-        WealthyData.Main.LogMessage($"MonsterDensityFromId = \"{str}\"", 10);
+        //WealthyData.Main.LogMessage($"MonsterDensityFromId = \"{str}\"", 10);
         if (str != null)
         {
             str = str.ToLower();

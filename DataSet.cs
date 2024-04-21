@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using static WealthyData.WealthyData;
 
 namespace WealthyData;
@@ -18,5 +19,5 @@ public class PackData
 {
     public MonsterType MonsterType { get; set; } = MonsterType.Normal;
     public bool AllFlameApplied { get; set; }
-    public float PackSizeModifier { get; set; } = 1.0f;
+    public double PackSizeModifier { get; set; } = 1.0;
 }
