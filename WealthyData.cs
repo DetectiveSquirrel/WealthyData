@@ -309,7 +309,7 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
 
         return tierChange switch
         {
-            -1 => GetLowerTierMod(necropolisPackMods, modRecord),
+            -1 => GetLowerTierMod(modRecord),
             1 => GetHigherTierMod(modRecord),
             0 => modRecord.Mod,
             _ => modRecord.Mod
@@ -329,34 +329,17 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
         return modRecord.Mod;
     }
 
-    private ModRecord GetLowerTierMod(UniversalFileWrapper<NecropolisPackMod> necroPackMods, NecropolisPackMod currentModRecord)
+    private ModRecord GetLowerTierMod(NecropolisPackMod modRecord)
     {
-        var lowestTierId = GetLowestTierId(necroPackMods, currentModRecord.Mod.Group);
-        if (!int.TryParse(currentModRecord.Tier.Id, out var currentModValue) || currentModValue == lowestTierId)
+        var downgradeMod = modRecord.Downgrade?.Mod;
+        if (downgradeMod != null)
         {
-            LogMessage($"{currentModRecord.Mod.Key} is the lowest tier version");
-            return currentModRecord.Mod;
+            LogMessage($"Grabbed Lower tier mod for {modRecord.Mod.Key} => {downgradeMod.Key}");
+            return downgradeMod;
         }
 
-        var desiredModValue = currentModValue - 1;
-        foreach (var modEntry in necroPackMods.EntriesList)
-        {
-            if (modEntry.Mod.Key != currentModRecord.Mod.Key && modEntry.Mod.Group == currentModRecord.Mod.Group && int.TryParse(modEntry.Tier.Id, out var newModValue) &&
-                newModValue == desiredModValue)
-            {
-                LogMessage($"Grabbed Lower tier mod for {currentModRecord.Mod.Key} => {modEntry.Mod.Key}");
-                return modEntry.Mod;
-            }
-        }
-
-        return currentModRecord.Mod;
-    }
-
-    private int GetLowestTierId(UniversalFileWrapper<NecropolisPackMod> necroPackMods, string group)
-    {
-        return necroPackMods.EntriesList.Where(m => m.Mod.Group == group).Select(m => int.TryParse(m.Tier.Id, out var tierId)
-            ? tierId
-            : int.MaxValue).Min();
+        LogMessage($"{modRecord.Mod.Key} is the lowest tier version");
+        return modRecord.Mod;
     }
 
     public double CalculatePackSize(double increasedPct, int devotionBonus, double moreOrLessPct) => 1.0 * moreOrLessPct * (1 + 0.01 * increasedPct * (1 + 0.01 * devotionBonus));
