@@ -310,10 +310,23 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
         return tierChange switch
         {
             -1 => GetLowerTierMod(necropolisPackMods, modRecord),
-            1 => modRecord.Upgrade?.Mod ?? modRecord.Mod,
+            1 => GetHigherTierMod(modRecord),
             0 => modRecord.Mod,
             _ => modRecord.Mod
         };
+    }
+
+    private ModRecord GetHigherTierMod(NecropolisPackMod modRecord)
+    {
+        var upgradeMod = modRecord.Upgrade?.Mod;
+        if (upgradeMod != null)
+        {
+            LogMessage($"Grabbed Higher tier mod for {modRecord.Mod.Key} => {upgradeMod.Key}");
+            return upgradeMod;
+        }
+
+        LogMessage($"{modRecord.Mod.Key} is the highest tier version");
+        return modRecord.Mod;
     }
 
     private ModRecord GetLowerTierMod(UniversalFileWrapper<NecropolisPackMod> necroPackMods, NecropolisPackMod currentModRecord)
