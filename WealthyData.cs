@@ -277,7 +277,6 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
         {
             var monsterModel = ConvertElementToMonster(associations.ElementAtOrDefault(i).Association);
 
-            LogMessage($"associations.ElementAtOrDefault({i})");
             if (monsterModel == null) continue;
             var item = new PackData
             {
@@ -322,6 +321,7 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
         var lowestTierId = GetLowestTierId(necroPackMods, currentModRecord.Mod.Group);
         if (!int.TryParse(currentModRecord.Tier.Id, out var currentModValue) || currentModValue == lowestTierId)
         {
+            LogMessage($"{currentModRecord.Mod.Key} is the lowest tier version");
             return currentModRecord.Mod;
         }
 
