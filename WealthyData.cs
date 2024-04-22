@@ -3,6 +3,7 @@ using ExileCore.PoEMemory.Components;
 using ExileCore.PoEMemory.Elements.Necropolis;
 using ExileCore.PoEMemory.FilesInMemory;
 using ExileCore.Shared.Enums;
+using GameOffsets;
 using ImGuiNET;
 using System;
 using System.Collections.Generic;
@@ -10,6 +11,7 @@ using System.Linq;
 using System.Numerics;
 using System.Text;
 using static ExileCore.PoEMemory.FilesInMemory.ModsDat;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace WealthyData;
 
@@ -62,7 +64,7 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
                 var profitList = Settings.DataSets.Select((data, index) => new
                 {
                     Index = index,
-                    Profit = data.TotalHistoricalYield - ((data.WealthCostInChaos ?? allflameCost) * data.Packs.Count(x => x.AllFlameApplied) + (data.ContainmentCostInChaos ?? containmentCost))
+                    Profit = data.TotalHistoricalYield - ((Settings.OverrideCosts ? allflameCost : data.WealthCostInChaos ?? allflameCost) * data.Packs.Count(x => x.AllFlameApplied) + (Settings.OverrideCosts ? containmentCost : data.ContainmentCostInChaos ?? containmentCost))
                 }).ToList();
                 bestProfitIndex = profitList.MaxBy(x => x.Profit)?.Index ?? -1;
                 worstProfitIndex = profitList.MinBy(x => x.Profit)?.Index ?? -1;
@@ -168,7 +170,7 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
         var allflameCost = Settings.AverageWealthCostInChaos;
         var containmentCost = Settings.AverageContainmentCostInChaos;
         var currentDataset = Settings.DataSets[Settings.LastSelectedIndex];
-        var costValue = (currentDataset.WealthCostInChaos ?? allflameCost) * currentDataset.Packs.Count(x => x.AllFlameApplied) + (currentDataset.ContainmentCostInChaos ?? containmentCost);
+        var costValue = (Settings.OverrideCosts ? allflameCost : currentDataset.WealthCostInChaos ?? allflameCost) * currentDataset.Packs.Count(x => x.AllFlameApplied) + (Settings.OverrideCosts ? containmentCost : currentDataset.ContainmentCostInChaos ?? containmentCost);
         var currentDatasetProfit = currentDataset.TotalHistoricalYield - costValue;
 
         if (ImGui.BeginTable("CurrentDatasetTable", 3, ImGuiTableFlags.SizingStretchSame | ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
@@ -269,6 +271,12 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
         refInt = Settings.AverageContainmentCostInChaos;
         ImGui.InputInt("Average cost of Scarab of Containment", ref refInt);
         Settings.AverageContainmentCostInChaos = refInt;
+
+        var refBool = Settings.OverrideCosts;
+        if (ImGui.Checkbox("Global Override of Dataset Item Costs", ref refBool))
+        {
+            Settings.OverrideCosts = !Settings.OverrideCosts;
+        }
         ImGui.NewLine();
     }
 
@@ -278,19 +286,19 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
 
         var allflameCost = Settings.AverageWealthCostInChaos;
         var containmentCost = Settings.AverageContainmentCostInChaos;
-        var costValue = Settings.DataSets.Sum(item => (item.WealthCostInChaos ?? allflameCost) * item.Packs.Count(x => x.AllFlameApplied) + (item.ContainmentCostInChaos ?? containmentCost));
+        var costValue = Settings.DataSets.Sum(item => (Settings.OverrideCosts ? allflameCost : item.WealthCostInChaos ?? allflameCost) * item.Packs.Count(x => x.AllFlameApplied) + (Settings.OverrideCosts ? containmentCost : item.ContainmentCostInChaos ?? containmentCost));
         var analysis = new MetricsCalculator();
         var meanGain = analysis.ProcessData("mean",
             Settings.DataSets,
-            item => item.TotalHistoricalYield - ((item.WealthCostInChaos ?? allflameCost) * item.Packs.Count(x => x.AllFlameApplied) + (item.ContainmentCostInChaos ?? containmentCost)));
+            item => item.TotalHistoricalYield - ((Settings.OverrideCosts ? allflameCost : item.WealthCostInChaos ?? allflameCost) * item.Packs.Count(x => x.AllFlameApplied) + (Settings.OverrideCosts ? containmentCost : item.ContainmentCostInChaos ?? containmentCost)));
 
         var medianGain = analysis.ProcessData("median",
             Settings.DataSets,
-            item => item.TotalHistoricalYield - ((item.WealthCostInChaos ?? allflameCost) * item.Packs.Count(x => x.AllFlameApplied) + (item.ContainmentCostInChaos ?? containmentCost)));
+            item => item.TotalHistoricalYield - ((Settings.OverrideCosts ? allflameCost : item.WealthCostInChaos ?? allflameCost) * item.Packs.Count(x => x.AllFlameApplied) + (Settings.OverrideCosts ? containmentCost : item.ContainmentCostInChaos ?? containmentCost)));
 
         var modeGain = analysis.ProcessData("mode",
             Settings.DataSets,
-            item => item.TotalHistoricalYield - ((item.WealthCostInChaos ?? allflameCost) * item.Packs.Count(x => x.AllFlameApplied) + (item.ContainmentCostInChaos ?? containmentCost)));
+            item => item.TotalHistoricalYield - ((Settings.OverrideCosts ? allflameCost : item.WealthCostInChaos ?? allflameCost) * item.Packs.Count(x => x.AllFlameApplied) + (Settings.OverrideCosts ? containmentCost : item.ContainmentCostInChaos ?? containmentCost)));
 
         var historicalReturnValue = Settings.DataSets.Sum(item => item.TotalHistoricalYield);
 

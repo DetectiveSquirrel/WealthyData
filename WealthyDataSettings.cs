@@ -9,6 +9,7 @@ public class WealthyDataSettings : ISettings
     public List<DataSet> DataSets = new(new List<DataSet>());
     public int LastSelectedIndex { get; set; } = -1;
     public ToggleNode Enable { get; set; } = new(false);
+    public bool OverrideCosts { get; set; } = false;
 
     public int DevotionModPctBonus { get; set; } = 40;
 
