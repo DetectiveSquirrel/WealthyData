@@ -15,6 +15,7 @@ namespace WealthyData;
 
 public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
 {
+    public string filterText = "";
     public enum MonsterType
     {
         High = 0,
@@ -38,7 +39,7 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
             Settings.LastSelectedIndex = -1;
         }
 
-        if (ImGui.BeginChild("LeftSettings", new Vector2(150, ImGui.GetContentRegionAvail().Y), ImGuiChildFlags.Border, ImGuiWindowFlags.None))
+        if (ImGui.BeginChild("LeftSettings", new Vector2(180, ImGui.GetContentRegionAvail().Y), ImGuiChildFlags.Border, ImGuiWindowFlags.None))
         {
             if (ImGui.Button("Add Dataset"))
             {
@@ -46,12 +47,42 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
                 Settings.LastSelectedIndex = Settings.DataSets.Count - 1;
             }
 
+            ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
+            var refString = filterText;
+            ImGui.InputTextWithHint("", "Filter..", ref refString, 1024);
+            filterText = refString;
+
+            var allflameCost = Settings.AverageWealthCostInChaos;
+            var containmentCost = Settings.AverageContainmentCostInChaos;
+            var bestProfitIndex = -1;
+            var worstProfitIndex = -1;
+
+            if (Settings.DataSets is {Count: > 0})
+            {
+                var profitList = Settings.DataSets.Select((data, index) => new
+                {
+                    Index = index,
+                    Profit = data.TotalHistoricalYield - ((data.WealthCostInChaos ?? allflameCost) * data.Packs.Count(x => x.AllFlameApplied) + (data.ContainmentCostInChaos ?? containmentCost))
+                }).ToList();
+                bestProfitIndex = profitList.MaxBy(x => x.Profit)?.Index ?? -1;
+                worstProfitIndex = profitList.MinBy(x => x.Profit)?.Index ?? -1;
+            }
+
             if (Settings.DataSets.Count != 0)
             {
                 for (var i = 0; i < Settings.DataSets.Count; i++)
                 {
                     ImGui.PushID($"{i}_dataSetSelector");
-                    if (ImGui.Selectable($"Dataset {i} [{(Settings.DataSets[i].LockedData ? "X" : " ")}]", Settings.LastSelectedIndex == i))
+
+                    string bestOrWorstMarker = "";
+                    if (i == bestProfitIndex)
+                        bestOrWorstMarker = " [BEST]";
+                    else if (i == worstProfitIndex)
+                        bestOrWorstMarker = " [WORST]";
+
+                    var label = $"Dataset {(i+1).ToString().PadLeft(Settings.DataSets.Count.ToString().Length, '0')} [{(Settings.DataSets[i].LockedData ? "X" : " ")}]{bestOrWorstMarker}";
+                    if (!label.Contains(filterText, StringComparison.CurrentCultureIgnoreCase)) continue;
+                    if (ImGui.Selectable(label, Settings.LastSelectedIndex == i))
                     {
                         Settings.LastSelectedIndex = i;
                     }
@@ -112,7 +143,7 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
 
     private bool DrawDatasetWidget()
     {
-        ImGui.SeparatorText("Data Set");
+        ImGui.SeparatorText($"Dataset ({Settings.LastSelectedIndex+1})");
         var refCheck = Settings.DataSets[Settings.LastSelectedIndex].LockedData;
         if (ImGui.Checkbox("Lock Dataset", ref refCheck))
         {
@@ -138,6 +169,7 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
         var containmentCost = Settings.AverageContainmentCostInChaos;
         var currentDataset = Settings.DataSets[Settings.LastSelectedIndex];
         var costValue = (currentDataset.WealthCostInChaos ?? allflameCost) * currentDataset.Packs.Count(x => x.AllFlameApplied) + (currentDataset.ContainmentCostInChaos ?? containmentCost);
+        var currentDatasetProfit = currentDataset.TotalHistoricalYield - costValue;
 
         if (ImGui.BeginTable("CurrentDatasetTable", 3, ImGuiTableFlags.SizingStretchSame | ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
         {
@@ -165,7 +197,7 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
             }
 
             ImGui.Text("Dataset Cost");
-            ImGui.Text("Dataset Returns");
+            ImGui.Text("Dataset Yield");
             ImGui.Text("Dataset Profit / Loss");
 
             ImGui.TableNextColumn();
@@ -187,7 +219,7 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
 
             ImGui.Text($"{costValue:#,#}");
             ImGui.Text($"{currentDataset.TotalHistoricalYield:#,#}");
-            ImGui.Text($"{currentDataset.TotalHistoricalYield - costValue:#,#}");
+            ImGui.Text($"{currentDatasetProfit:#,#}");
 
             ImGui.TableNextColumn();
 
@@ -273,7 +305,7 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
             ImGui.TableNextColumn();
 
             ImGui.Text("Total Dataset Cost");
-            ImGui.Text("Total Dataset Returns");
+            ImGui.Text("Total Dataset Yield");
             ImGui.Text("Total Profit / Loss");
             ImGui.NewLine();
             ImGui.Text("Gains Mean");
