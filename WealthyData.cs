@@ -51,7 +51,7 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
                 for (var i = 0; i < Settings.DataSets.Count; i++)
                 {
                     ImGui.PushID($"{i}_dataSetSelector");
-                    if (ImGui.Selectable($"Data Set {i}", Settings.LastSelectedIndex == i))
+                    if (ImGui.Selectable($"Dataset {i} [{(Settings.DataSets[i].LockedData ? "X" : " ")}]", Settings.LastSelectedIndex == i))
                     {
                         Settings.LastSelectedIndex = i;
                     }
@@ -120,11 +120,97 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
         }
 
         ImGui.SameLine(0, 200);
-        if (ImGui.Button("Delete This Dataset") && !Settings.DataSets[Settings.LastSelectedIndex].LockedData)
+        if (ImGui.Button($"{(Settings.DataSets[Settings.LastSelectedIndex].LockedData ? "Unlock to Dataset" : "Delete This Dataset")}") && !Settings.DataSets[Settings.LastSelectedIndex].LockedData)
         {
             Settings.DataSets.RemoveAt(Settings.LastSelectedIndex);
             Settings.LastSelectedIndex--;
             return true;
+        }
+
+        if (ImGui.Button($"Set Current Allflame & Containment Prices {(Settings.DataSets[Settings.LastSelectedIndex].LockedData ? "[Unlock to apply]" : string.Empty)}") &&
+            !Settings.DataSets[Settings.LastSelectedIndex].LockedData)
+        {
+            Settings.DataSets[Settings.LastSelectedIndex].WealthCostInChaos = Settings.AverageWealthCostInChaos;
+            Settings.DataSets[Settings.LastSelectedIndex].ContainmentCostInChaos = Settings.AverageContainmentCostInChaos;
+        }
+
+        var allflameCost = Settings.AverageWealthCostInChaos;
+        var containmentCost = Settings.AverageContainmentCostInChaos;
+        var currentDataset = Settings.DataSets[Settings.LastSelectedIndex];
+        var costValue = (currentDataset.WealthCostInChaos ?? allflameCost) * currentDataset.Packs.Count(x => x.AllFlameApplied) + (currentDataset.ContainmentCostInChaos ?? containmentCost);
+
+        if (ImGui.BeginTable("CurrentDatasetTable", 3, ImGuiTableFlags.SizingStretchSame | ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
+        {
+            ImGui.TableSetupColumn("Data Type");
+            ImGui.TableSetupColumn("Amount");
+            ImGui.TableSetupColumn("Value Type");
+            ImGui.TableHeadersRow();
+
+            // Text Column
+            ImGui.TableNextColumn();
+
+            if (currentDataset.WealthCostInChaos != null)
+            {
+                ImGui.Text("Snapshot Wealth Cost");
+            }
+
+            if (currentDataset.ContainmentCostInChaos != null)
+            {
+                ImGui.Text("Snapshot Containment Cost");
+            }
+
+            if (currentDataset.WealthCostInChaos != null || currentDataset.ContainmentCostInChaos != null)
+            {
+                ImGui.NewLine();
+            }
+
+            ImGui.Text("Dataset Cost");
+            ImGui.Text("Dataset Returns");
+            ImGui.Text("Dataset Profit / Loss");
+
+            ImGui.TableNextColumn();
+
+            if (currentDataset.WealthCostInChaos != null)
+            {
+                ImGui.Text(currentDataset.WealthCostInChaos.ToString());
+            }
+
+            if (currentDataset.ContainmentCostInChaos != null)
+            {
+                ImGui.Text(currentDataset.ContainmentCostInChaos.ToString());
+            }
+
+            if (currentDataset.WealthCostInChaos != null || currentDataset.ContainmentCostInChaos != null)
+            {
+                ImGui.NewLine();
+            }
+
+            ImGui.Text($"{costValue:#,#}");
+            ImGui.Text($"{currentDataset.TotalHistoricalYield:#,#}");
+            ImGui.Text($"{currentDataset.TotalHistoricalYield - costValue:#,#}");
+
+            ImGui.TableNextColumn();
+
+            if (currentDataset.ContainmentCostInChaos != null)
+            {
+                ImGui.Text("Chaos");
+            }
+
+            if (currentDataset.WealthCostInChaos != null)
+            {
+                ImGui.Text("Chaos");
+            }
+
+            if (currentDataset.WealthCostInChaos != null || currentDataset.ContainmentCostInChaos != null)
+            {
+                ImGui.NewLine();
+            }
+
+            ImGui.Text("Chaos");
+            ImGui.Text("Chaos");
+            ImGui.Text("Chaos");
+
+            ImGui.EndTable();
         }
 
         ImGui.NewLine();
@@ -160,11 +246,20 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
 
         var allflameCost = Settings.AverageWealthCostInChaos;
         var containmentCost = Settings.AverageContainmentCostInChaos;
-        var costValue = Settings.DataSets.Sum(item => allflameCost * item.Packs.Count(x => x.AllFlameApplied) + containmentCost);
+        var costValue = Settings.DataSets.Sum(item => (item.WealthCostInChaos ?? allflameCost) * item.Packs.Count(x => x.AllFlameApplied) + (item.ContainmentCostInChaos ?? containmentCost));
         var analysis = new MetricsCalculator();
-        var meanGain = analysis.ProcessData("mean", Settings.DataSets, item => item.TotalHistoricalYield - (allflameCost * item.Packs.Count(x => x.AllFlameApplied) + containmentCost));
-        var medianGain = analysis.ProcessData("median", Settings.DataSets, item => item.TotalHistoricalYield - (allflameCost * item.Packs.Count(x => x.AllFlameApplied) + containmentCost));
-        var modeGain = analysis.ProcessData("mode", Settings.DataSets, item => item.TotalHistoricalYield - (allflameCost * item.Packs.Count(x => x.AllFlameApplied) + containmentCost));
+        var meanGain = analysis.ProcessData("mean",
+            Settings.DataSets,
+            item => item.TotalHistoricalYield - ((item.WealthCostInChaos ?? allflameCost) * item.Packs.Count(x => x.AllFlameApplied) + (item.ContainmentCostInChaos ?? containmentCost)));
+
+        var medianGain = analysis.ProcessData("median",
+            Settings.DataSets,
+            item => item.TotalHistoricalYield - ((item.WealthCostInChaos ?? allflameCost) * item.Packs.Count(x => x.AllFlameApplied) + (item.ContainmentCostInChaos ?? containmentCost)));
+
+        var modeGain = analysis.ProcessData("mode",
+            Settings.DataSets,
+            item => item.TotalHistoricalYield - ((item.WealthCostInChaos ?? allflameCost) * item.Packs.Count(x => x.AllFlameApplied) + (item.ContainmentCostInChaos ?? containmentCost)));
+
         var historicalReturnValue = Settings.DataSets.Sum(item => item.TotalHistoricalYield);
 
         if (ImGui.BeginTable("ProfitReturnsTable", 3, ImGuiTableFlags.SizingStretchSame | ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
@@ -378,7 +473,7 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
                 AllFlameApplied = monsterModel.Name == "Tumbling Wealth",
                 MonsterType = monsterModel.Density,
                 PackSizeModifier = CalculatePackSize(SumModStats(associations.ElementAtOrDefault(i).Mod != null
-                        ? [GetDiffTieredMod(associations.ElementAtOrDefault(i).Mod, monsterModel.TierChange)]
+                        ? new List<ModRecord> {GetDiffTieredMod(associations.ElementAtOrDefault(i).Mod, monsterModel.TierChange)}
                         : new List<ModRecord>())[GameStat.PackSizePct],
                     Settings.DevotionModPctBonus,
                     monsterModel.PackSize)
