@@ -169,10 +169,9 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
 
         if (ImGui.BeginTable("ProfitReturnsTable", 3, ImGuiTableFlags.SizingStretchSame | ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
         {
-
-            ImGui.TableSetupColumn($"Data Type");
-            ImGui.TableSetupColumn($"Amount");
-            ImGui.TableSetupColumn($"Value Type");
+            ImGui.TableSetupColumn("Data Type");
+            ImGui.TableSetupColumn("Amount");
+            ImGui.TableSetupColumn("Value Type");
             ImGui.TableHeadersRow();
 
             // Text Column
@@ -198,13 +197,13 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
 
             ImGui.TableNextColumn();
 
-            ImGui.Text($"Chaos");
-            ImGui.Text($"Chaos");
-            ImGui.Text($"Chaos");
+            ImGui.Text("Chaos");
+            ImGui.Text("Chaos");
+            ImGui.Text("Chaos");
             ImGui.NewLine();
-            ImGui.Text($"Chaos");
-            ImGui.Text($"Chaos");
-            ImGui.Text($"Chaos");
+            ImGui.Text("Chaos");
+            ImGui.Text("Chaos");
+            ImGui.Text("Chaos");
 
             ImGui.EndTable();
         }
@@ -470,15 +469,15 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
             {
                 model.PackSize = 0.5f;
             }
-            else if (tooltipText.Contains("50% more Pack Size"))
+            else if (tooltipText.Contains("50% more Pack Size", StringComparison.CurrentCultureIgnoreCase))
             {
                 model.PackSize = 1.5f;
             }
-            else if (tooltipText.Contains("+1"))
+            else if (tooltipText.Contains("+1", StringComparison.CurrentCultureIgnoreCase))
             {
                 model.TierChange = 1;
             }
-            else if (tooltipText.Contains("-1"))
+            else if (tooltipText.Contains("-1", StringComparison.CurrentCultureIgnoreCase))
             {
                 model.TierChange = -1;
             }
