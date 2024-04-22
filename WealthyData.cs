@@ -68,25 +68,11 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
         {
             if (Settings.DataSets.Count > Settings.LastSelectedIndex && Settings.LastSelectedIndex > -1)
             {
-                ImGui.SeparatorText("Globals");
-                var refDevotionBonus = Settings.DevotionModPctBonus;
-                ImGui.InputInt("Global Devotion Bonus %", ref refDevotionBonus);
-                Settings.DevotionModPctBonus = refDevotionBonus;
+                DrawGlobalsWidget();
 
-                ImGui.SeparatorText("Data Set");
-                var refCheck = Settings.DataSets[Settings.LastSelectedIndex].LockedData;
-                if (ImGui.Checkbox("Lock Dataset", ref refCheck))
-                {
-                    Settings.DataSets[Settings.LastSelectedIndex].LockedData = !Settings.DataSets[Settings.LastSelectedIndex].LockedData;
-                }
+                ReturnsAndCostWidget();
 
-                ImGui.SameLine(0, 200);
-                if (ImGui.Button("Delete This Dataset") && !Settings.DataSets[Settings.LastSelectedIndex].LockedData)
-                {
-                    Settings.DataSets.RemoveAt(Settings.LastSelectedIndex);
-                    Settings.LastSelectedIndex--;
-                    return;
-                }
+                if (DrawDatasetWidget()) return;
 
                 DrawValuesWidgets();
 
@@ -122,6 +108,108 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
         }
 
         ImGui.EndChild();
+    }
+
+    private bool DrawDatasetWidget()
+    {
+        ImGui.SeparatorText("Data Set");
+        var refCheck = Settings.DataSets[Settings.LastSelectedIndex].LockedData;
+        if (ImGui.Checkbox("Lock Dataset", ref refCheck))
+        {
+            Settings.DataSets[Settings.LastSelectedIndex].LockedData = !Settings.DataSets[Settings.LastSelectedIndex].LockedData;
+        }
+
+        ImGui.SameLine(0, 200);
+        if (ImGui.Button("Delete This Dataset") && !Settings.DataSets[Settings.LastSelectedIndex].LockedData)
+        {
+            Settings.DataSets.RemoveAt(Settings.LastSelectedIndex);
+            Settings.LastSelectedIndex--;
+            return true;
+        }
+
+        ImGui.NewLine();
+
+        return false;
+    }
+
+    private void DrawGlobalsWidget()
+    {
+        ImGui.SeparatorText("Globals");
+        var regionWidth = ImGui.GetContentRegionAvail().X / 3;
+
+        ImGui.SetNextItemWidth(regionWidth);
+        var refInt = Settings.DevotionModPctBonus;
+        ImGui.InputInt("Global Devotion Bonus %", ref refInt);
+        Settings.DevotionModPctBonus = refInt;
+
+        ImGui.SetNextItemWidth(regionWidth);
+        refInt = Settings.AverageWealthCostInChaos;
+        ImGui.InputInt("Average cost of Allflame of Wealth", ref refInt);
+        Settings.AverageWealthCostInChaos = refInt;
+
+        ImGui.SetNextItemWidth(regionWidth);
+        refInt = Settings.AverageContainmentCostInChaos;
+        ImGui.InputInt("Average cost of Scarab of Containment", ref refInt);
+        Settings.AverageContainmentCostInChaos = refInt;
+        ImGui.NewLine();
+    }
+
+    private void ReturnsAndCostWidget()
+    {
+        ImGui.SeparatorText("Returns / Cost");
+
+        var allflameCost = Settings.AverageWealthCostInChaos;
+        var containmentCost = Settings.AverageContainmentCostInChaos;
+        var costValue = Settings.DataSets.Sum(item => allflameCost * item.Packs.Count(x => x.AllFlameApplied) + containmentCost);
+        var analysis = new MetricsCalculator();
+        var meanGain = analysis.ProcessData("mean", Settings.DataSets, item => item.TotalHistoricalYield - (allflameCost * item.Packs.Count(x => x.AllFlameApplied) + containmentCost));
+        var medianGain = analysis.ProcessData("median", Settings.DataSets, item => item.TotalHistoricalYield - (allflameCost * item.Packs.Count(x => x.AllFlameApplied) + containmentCost));
+        var modeGain = analysis.ProcessData("mode", Settings.DataSets, item => item.TotalHistoricalYield - (allflameCost * item.Packs.Count(x => x.AllFlameApplied) + containmentCost));
+        var historicalReturnValue = Settings.DataSets.Sum(item => item.TotalHistoricalYield);
+
+        if (ImGui.BeginTable("ProfitReturnsTable", 3, ImGuiTableFlags.SizingStretchSame | ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
+        {
+
+            ImGui.TableSetupColumn($"Data Type");
+            ImGui.TableSetupColumn($"Amount");
+            ImGui.TableSetupColumn($"Value Type");
+            ImGui.TableHeadersRow();
+
+            // Text Column
+            ImGui.TableNextColumn();
+
+            ImGui.Text("Total Dataset Cost");
+            ImGui.Text("Total Dataset Returns");
+            ImGui.Text("Total Profit / Loss");
+            ImGui.NewLine();
+            ImGui.Text("Gains Mean");
+            ImGui.Text("Gains Median");
+            ImGui.Text("Gains Mode");
+
+            ImGui.TableNextColumn();
+
+            ImGui.Text($"{costValue:#,#}");
+            ImGui.Text($"{historicalReturnValue:#,#}");
+            ImGui.Text($"{historicalReturnValue - costValue:#,#}");
+            ImGui.NewLine();
+            ImGui.Text($"{meanGain:#,#}");
+            ImGui.Text($"{medianGain:#,#}");
+            ImGui.Text($"{modeGain:#,#}");
+
+            ImGui.TableNextColumn();
+
+            ImGui.Text($"Chaos");
+            ImGui.Text($"Chaos");
+            ImGui.Text($"Chaos");
+            ImGui.NewLine();
+            ImGui.Text($"Chaos");
+            ImGui.Text($"Chaos");
+            ImGui.Text($"Chaos");
+
+            ImGui.EndTable();
+        }
+
+        ImGui.NewLine();
     }
 
     private bool DrawPackTable()
@@ -212,6 +300,7 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
     private void DrawValuesWidgets()
     {
         ImGui.SeparatorText("Values");
+        var regionWidth = ImGui.GetContentRegionAvail().X / 3;
         if (ImGui.Button("Copy Stash Tab Totals"))
         {
             if (GetStashValue(out var tabValue, out var chaosOrbs, out var exaltedOrbs, out var vaalOrbs))
@@ -226,6 +315,7 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
             }
         }
 
+        ImGui.SetNextItemWidth(regionWidth);
         var refInt = Settings.DataSets[Settings.LastSelectedIndex].TotalStrongboxes;
         ImGui.InputInt("Strongboxes", ref refInt);
         if (!Settings.DataSets[Settings.LastSelectedIndex].LockedData)
@@ -233,6 +323,7 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
             Settings.DataSets[Settings.LastSelectedIndex].TotalStrongboxes = refInt;
         }
 
+        ImGui.SetNextItemWidth(regionWidth);
         var refDouble = Settings.DataSets[Settings.LastSelectedIndex].TotalHistoricalYield;
         ImGui.InputDouble("Total Historical Yield", ref refDouble);
         if (!Settings.DataSets[Settings.LastSelectedIndex].LockedData)
@@ -240,6 +331,7 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
             Settings.DataSets[Settings.LastSelectedIndex].TotalHistoricalYield = refDouble;
         }
 
+        ImGui.SetNextItemWidth(regionWidth);
         refInt = Settings.DataSets[Settings.LastSelectedIndex].TotalChaos;
         ImGui.InputInt("Total Chaos", ref refInt);
         if (!Settings.DataSets[Settings.LastSelectedIndex].LockedData)
@@ -247,6 +339,7 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
             Settings.DataSets[Settings.LastSelectedIndex].TotalChaos = refInt;
         }
 
+        ImGui.SetNextItemWidth(regionWidth);
         refInt = Settings.DataSets[Settings.LastSelectedIndex].TotalExalt;
         ImGui.InputInt("Total Exalt", ref refInt);
         if (!Settings.DataSets[Settings.LastSelectedIndex].LockedData)
@@ -254,12 +347,15 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
             Settings.DataSets[Settings.LastSelectedIndex].TotalExalt = refInt;
         }
 
+        ImGui.SetNextItemWidth(regionWidth);
         refInt = Settings.DataSets[Settings.LastSelectedIndex].TotalVaal;
         ImGui.InputInt("Total Vaal", ref refInt);
         if (!Settings.DataSets[Settings.LastSelectedIndex].LockedData)
         {
             Settings.DataSets[Settings.LastSelectedIndex].TotalVaal = refInt;
         }
+
+        ImGui.NewLine();
     }
 
     public static IReadOnlyDictionary<GameStat, int> SumModStats(IEnumerable<ModRecord> mods)

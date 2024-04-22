@@ -11,4 +11,8 @@ public class WealthyDataSettings : ISettings
     public ToggleNode Enable { get; set; } = new(false);
 
     public int DevotionModPctBonus { get; set; } = 40;
+
+    public int AverageWealthCostInChaos { get; set; } = 340;
+
+    public int AverageContainmentCostInChaos { get; set; } = 60;
 }
