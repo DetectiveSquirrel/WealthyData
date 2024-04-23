@@ -1,4 +1,4 @@
-﻿using System;
+﻿using ExileCore.Shared.Enums;
 using System.Collections.Generic;
 using static WealthyData.WealthyData;
 
@@ -15,6 +15,9 @@ public class DataSet
     public int? WealthCostInChaos { get; set; } = null;
     public int? ContainmentCostInChaos { get; set; } = null;
     public List<PackData> Packs { get; set; } = [];
+    public string AreaName { get; set; } = "";
+    public Dictionary<GameStat, int> MapMods { get; set; } = [];
+    public Dictionary<GameStat, int> MapModsVisible { get; set; } = [];
 }
 
 public class PackData

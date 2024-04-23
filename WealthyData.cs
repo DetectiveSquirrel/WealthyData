@@ -3,21 +3,19 @@ using ExileCore.PoEMemory.Components;
 using ExileCore.PoEMemory.Elements.Necropolis;
 using ExileCore.PoEMemory.FilesInMemory;
 using ExileCore.Shared.Enums;
-using GameOffsets;
 using ImGuiNET;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using System.Text;
+using System.Text.RegularExpressions;
 using static ExileCore.PoEMemory.FilesInMemory.ModsDat;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace WealthyData;
 
 public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
 {
-    public string filterText = "";
     public enum MonsterType
     {
         High = 0,
@@ -27,6 +25,8 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
     }
 
     public static WealthyData Main;
+    public string dataSetMapModTextFilter = "";
+    public string dataSetTextFilter = "";
 
     public override bool Initialise()
     {
@@ -50,9 +50,9 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
             }
 
             ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X);
-            var refString = filterText;
+            var refString = dataSetTextFilter;
             ImGui.InputTextWithHint("", "Filter..", ref refString, 1024);
-            filterText = refString;
+            dataSetTextFilter = refString;
 
             var allflameCost = Settings.AverageWealthCostInChaos;
             var containmentCost = Settings.AverageContainmentCostInChaos;
@@ -64,8 +64,13 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
                 var profitList = Settings.DataSets.Select((data, index) => new
                 {
                     Index = index,
-                    Profit = data.TotalHistoricalYield - ((Settings.OverrideCosts ? allflameCost : data.WealthCostInChaos ?? allflameCost) * data.Packs.Count(x => x.AllFlameApplied) + (Settings.OverrideCosts ? containmentCost : data.ContainmentCostInChaos ?? containmentCost))
+                    Profit = data.TotalHistoricalYield - ((Settings.OverrideCosts
+                        ? allflameCost
+                        : data.WealthCostInChaos ?? allflameCost) * data.Packs.Count(x => x.AllFlameApplied) + (Settings.OverrideCosts
+                        ? containmentCost
+                        : data.ContainmentCostInChaos ?? containmentCost))
                 }).ToList();
+
                 bestProfitIndex = profitList.MaxBy(x => x.Profit)?.Index ?? -1;
                 worstProfitIndex = profitList.MinBy(x => x.Profit)?.Index ?? -1;
             }
@@ -76,14 +81,18 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
                 {
                     ImGui.PushID($"{i}_dataSetSelector");
 
-                    string bestOrWorstMarker = "";
+                    var bestOrWorstMarker = "";
                     if (i == bestProfitIndex)
+                    {
                         bestOrWorstMarker = " [BEST]";
+                    }
                     else if (i == worstProfitIndex)
+                    {
                         bestOrWorstMarker = " [WORST]";
+                    }
 
-                    var label = $"Dataset {(i+1).ToString().PadLeft(Settings.DataSets.Count.ToString().Length, '0')} [{(Settings.DataSets[i].LockedData ? "X" : " ")}]{bestOrWorstMarker}";
-                    if (!label.Contains(filterText, StringComparison.CurrentCultureIgnoreCase)) continue;
+                    var label = $"Dataset {(i + 1).ToString().PadLeft(Settings.DataSets.Count.ToString().Length, '0')} [{(Settings.DataSets[i].LockedData ? "X" : " ")}]{bestOrWorstMarker}";
+                    if (!label.Contains(dataSetTextFilter, StringComparison.CurrentCultureIgnoreCase)) continue;
                     if (ImGui.Selectable(label, Settings.LastSelectedIndex == i))
                     {
                         Settings.LastSelectedIndex = i;
@@ -110,29 +119,11 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
                 DrawValuesWidgets();
 
                 ImGui.SeparatorText("Pack Data");
-                // Table
-                if (ImGui.Button("Add Pack") && !Settings.DataSets[Settings.LastSelectedIndex].LockedData)
-                {
-                    Settings.DataSets[Settings.LastSelectedIndex].Packs.Add(new PackData());
-                }
 
-                if (ImGui.Button("Copy Pack"))
-                {
-                    var necropolisMonsterPanel = GameController.IngameState.IngameUi.NecropolisMonsterPanel;
-                    if (necropolisMonsterPanel is {IsVisible: true} && !Settings.DataSets[Settings.LastSelectedIndex].LockedData)
-                    {
-                        GetModelLists(necropolisMonsterPanel, out var packs);
+                DrawPackTable();
 
-                        Settings.DataSets[Settings.LastSelectedIndex].Packs = packs;
-                    }
-                }
-
-                if (Settings.DataSets[Settings.LastSelectedIndex].Packs.Count <= 0)
-                {
-                    return;
-                }
-
-                if (DrawPackTable()) return;
+                ImGui.SeparatorText("Map Mods");
+                DrawAreaMods();
             }
             else
             {
@@ -140,12 +131,81 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
             }
         }
 
+        ImGui.NewLine();
+
         ImGui.EndChild();
+    }
+
+    private static string AddSpacesBeforeCaps(string input) =>
+        // Using regular expressions to insert a space before each capital letter that is not at the start of the string
+        Regex.Replace(input, "(?<!^)([A-Z])", " $1");
+
+    public void DrawAreaMods()
+    {
+        ImGui.SetNextItemWidth(ImGui.GetContentRegionAvail().X / 3);
+        var refInt = Settings.DataSets[Settings.LastSelectedIndex].TotalStrongboxes;
+        ImGui.InputInt("Strongboxes", ref refInt);
+        if (!Settings.DataSets[Settings.LastSelectedIndex].LockedData)
+        {
+            Settings.DataSets[Settings.LastSelectedIndex].TotalStrongboxes = refInt;
+        }
+
+        if (ImGui.Button("Copy Area Stats") && GameController?.IngameState?.Data?.CurrentArea?.Name != null && !Settings.DataSets[Settings.LastSelectedIndex].LockedData)
+        {
+            Settings.DataSets[Settings.LastSelectedIndex].AreaName = $"{GameController?.IngameState?.Data?.CurrentArea?.Name} ({GameController?.IngameState?.Data?.CurrentAreaLevel})";
+            Settings.DataSets[Settings.LastSelectedIndex].MapMods = GameController?.IngameState?.Data?.MapStats;
+            var hasStrongBoxValue = Settings.DataSets[Settings.LastSelectedIndex].MapMods!.TryGetValue(GameStat.MapNumExtraStrongboxes, out var strongBoxCount);
+            if (hasStrongBoxValue) Settings.DataSets[Settings.LastSelectedIndex].TotalStrongboxes = strongBoxCount;
+        }
+
+        var refString = dataSetMapModTextFilter;
+        ImGui.InputTextWithHint("", "Filter..", ref refString, 1024);
+        dataSetMapModTextFilter = refString;
+
+        if (Settings.DataSets[Settings.LastSelectedIndex].MapMods?.Count > 0 &&
+            ImGui.BeginTable("CurrentDataSetMapMods", 2, ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingFixedFit))
+        {
+            ImGui.TableSetupColumn($"{(!string.IsNullOrEmpty(Settings.DataSets[Settings.LastSelectedIndex].AreaName) ? Settings.DataSets[Settings.LastSelectedIndex].AreaName : "Map Mods")}");
+            ImGui.TableSetupColumn("Value");
+            ImGui.TableHeadersRow();
+
+            ImGui.TableNextColumn();
+
+            var mapModsList = Settings.DataSets[Settings.LastSelectedIndex].MapMods.ToList();
+
+            for (var i = 0; i < mapModsList.Count; i++)
+            {
+                var key = mapModsList[i].Key.ToString();
+                var value = mapModsList[i].Value.ToString();
+                var splitSpaceFilter = dataSetMapModTextFilter.Replace("Pct", "%", StringComparison.OrdinalIgnoreCase)
+                    .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+                if (!splitSpaceFilter.All(part => key.Replace("Pct", "%", StringComparison.OrdinalIgnoreCase).Contains(part, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                if (ImGui.Selectable(AddSpacesBeforeCaps(key).Replace("Pct", "%", StringComparison.OrdinalIgnoreCase)))
+                {
+                    ImGui.SetClipboardText($"{key}, {value}");
+                }
+
+                ImGui.TableNextColumn();
+                ImGui.TextUnformatted(value);
+
+                if (i < mapModsList.Count - 1)
+                {
+                    ImGui.TableNextColumn();
+                }
+            }
+
+            ImGui.EndTable();
+        }
     }
 
     private bool DrawDatasetWidget()
     {
-        ImGui.SeparatorText($"Dataset ({Settings.LastSelectedIndex+1})");
+        ImGui.SeparatorText($"Dataset ({Settings.LastSelectedIndex + 1})");
         var refCheck = Settings.DataSets[Settings.LastSelectedIndex].LockedData;
         if (ImGui.Checkbox("Lock Dataset", ref refCheck))
         {
@@ -170,7 +230,12 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
         var allflameCost = Settings.AverageWealthCostInChaos;
         var containmentCost = Settings.AverageContainmentCostInChaos;
         var currentDataset = Settings.DataSets[Settings.LastSelectedIndex];
-        var costValue = (Settings.OverrideCosts ? allflameCost : currentDataset.WealthCostInChaos ?? allflameCost) * currentDataset.Packs.Count(x => x.AllFlameApplied) + (Settings.OverrideCosts ? containmentCost : currentDataset.ContainmentCostInChaos ?? containmentCost);
+        var costValue = (Settings.OverrideCosts
+            ? allflameCost
+            : currentDataset.WealthCostInChaos ?? allflameCost) * currentDataset.Packs.Count(x => x.AllFlameApplied) + (Settings.OverrideCosts
+            ? containmentCost
+            : currentDataset.ContainmentCostInChaos ?? containmentCost);
+
         var currentDatasetProfit = currentDataset.TotalHistoricalYield - costValue;
 
         if (ImGui.BeginTable("CurrentDatasetTable", 3, ImGuiTableFlags.SizingStretchSame | ImGuiTableFlags.Borders | ImGuiTableFlags.RowBg))
@@ -277,6 +342,7 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
         {
             Settings.OverrideCosts = !Settings.OverrideCosts;
         }
+
         ImGui.NewLine();
     }
 
@@ -286,19 +352,36 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
 
         var allflameCost = Settings.AverageWealthCostInChaos;
         var containmentCost = Settings.AverageContainmentCostInChaos;
-        var costValue = Settings.DataSets.Sum(item => (Settings.OverrideCosts ? allflameCost : item.WealthCostInChaos ?? allflameCost) * item.Packs.Count(x => x.AllFlameApplied) + (Settings.OverrideCosts ? containmentCost : item.ContainmentCostInChaos ?? containmentCost));
+        var costValue = Settings.DataSets.Sum(item => (Settings.OverrideCosts
+            ? allflameCost
+            : item.WealthCostInChaos ?? allflameCost) * item.Packs.Count(x => x.AllFlameApplied) + (Settings.OverrideCosts
+            ? containmentCost
+            : item.ContainmentCostInChaos ?? containmentCost));
+
         var analysis = new MetricsCalculator();
         var meanGain = analysis.ProcessData("mean",
             Settings.DataSets,
-            item => item.TotalHistoricalYield - ((Settings.OverrideCosts ? allflameCost : item.WealthCostInChaos ?? allflameCost) * item.Packs.Count(x => x.AllFlameApplied) + (Settings.OverrideCosts ? containmentCost : item.ContainmentCostInChaos ?? containmentCost)));
+            item => item.TotalHistoricalYield - ((Settings.OverrideCosts
+                ? allflameCost
+                : item.WealthCostInChaos ?? allflameCost) * item.Packs.Count(x => x.AllFlameApplied) + (Settings.OverrideCosts
+                ? containmentCost
+                : item.ContainmentCostInChaos ?? containmentCost)));
 
         var medianGain = analysis.ProcessData("median",
             Settings.DataSets,
-            item => item.TotalHistoricalYield - ((Settings.OverrideCosts ? allflameCost : item.WealthCostInChaos ?? allflameCost) * item.Packs.Count(x => x.AllFlameApplied) + (Settings.OverrideCosts ? containmentCost : item.ContainmentCostInChaos ?? containmentCost)));
+            item => item.TotalHistoricalYield - ((Settings.OverrideCosts
+                ? allflameCost
+                : item.WealthCostInChaos ?? allflameCost) * item.Packs.Count(x => x.AllFlameApplied) + (Settings.OverrideCosts
+                ? containmentCost
+                : item.ContainmentCostInChaos ?? containmentCost)));
 
         var modeGain = analysis.ProcessData("mode",
             Settings.DataSets,
-            item => item.TotalHistoricalYield - ((Settings.OverrideCosts ? allflameCost : item.WealthCostInChaos ?? allflameCost) * item.Packs.Count(x => x.AllFlameApplied) + (Settings.OverrideCosts ? containmentCost : item.ContainmentCostInChaos ?? containmentCost)));
+            item => item.TotalHistoricalYield - ((Settings.OverrideCosts
+                ? allflameCost
+                : item.WealthCostInChaos ?? allflameCost) * item.Packs.Count(x => x.AllFlameApplied) + (Settings.OverrideCosts
+                ? containmentCost
+                : item.ContainmentCostInChaos ?? containmentCost)));
 
         var historicalReturnValue = Settings.DataSets.Sum(item => item.TotalHistoricalYield);
 
@@ -346,89 +429,111 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
         ImGui.NewLine();
     }
 
-    private bool DrawPackTable()
+    private void DrawPackTable()
     {
-        if (!ImGui.BeginTable("WeightingTable", 4, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.Borders))
+        // Table
+        if (ImGui.Button("Add Pack") && !Settings.DataSets[Settings.LastSelectedIndex].LockedData)
         {
-            return true;
+            Settings.DataSets[Settings.LastSelectedIndex].Packs.Add(new PackData());
         }
 
-        var currentDataset = Settings.DataSets[Settings.LastSelectedIndex];
-
-        ImGui.TableSetupColumn($"({currentDataset.Packs.Count})");
-        ImGui.TableSetupColumn("Pack Size", ImGuiTableColumnFlags.None, 150);
-        ImGui.TableSetupColumn($"All Flames Applied ({currentDataset.Packs.Count(x => x.AllFlameApplied)})");
-        ImGui.TableSetupColumn(new StringBuilder().Append("MonsterType (H-").Append(currentDataset.Packs.Count(x => x.MonsterType == MonsterType.High)).Append(", N-")
-                .Append(currentDataset.Packs.Count(x => x.MonsterType == MonsterType.Normal)).Append(", L-").Append(currentDataset.Packs.Count(x => x.MonsterType == MonsterType.Low)).Append(", VL-")
-                .Append(currentDataset.Packs.Count(x => x.MonsterType == MonsterType.VeryLow)).Append(")").ToString(),
-            ImGuiTableColumnFlags.WidthStretch);
-
-        ImGui.TableHeadersRow();
-
-        var deletePackIndex = -1;
-        // Weighting column
-        ImGui.TableNextColumn();
-        for (var i = 0; i < currentDataset.Packs.Count; i++)
+        if (ImGui.Button("Copy Pack"))
         {
-            ImGui.PushID($"{i}_packColumn");
-            var pack = currentDataset.Packs[i];
-            if (ImGui.Button("Delete") && !currentDataset.LockedData)
+            var necropolisMonsterPanel = GameController.IngameState.IngameUi.NecropolisMonsterPanel;
+            if (necropolisMonsterPanel is {IsVisible: true} && !Settings.DataSets[Settings.LastSelectedIndex].LockedData)
             {
-                deletePackIndex = i;
-            }
+                GetModelLists(necropolisMonsterPanel, out var packs);
 
+                Settings.DataSets[Settings.LastSelectedIndex].Packs = packs;
+            }
+        }
+
+        if (Settings.DataSets[Settings.LastSelectedIndex].Packs.Count <= 0)
+        {
+            ImGui.NewLine();
+            return;
+        }
+
+        if (ImGui.BeginTable("WeightingTable", 4, ImGuiTableFlags.SizingFixedFit | ImGuiTableFlags.Borders))
+        {
+            var currentDataset = Settings.DataSets[Settings.LastSelectedIndex];
+
+            ImGui.TableSetupColumn($"({currentDataset.Packs.Count})");
+            ImGui.TableSetupColumn("Pack Size", ImGuiTableColumnFlags.None, 150);
+            ImGui.TableSetupColumn($"All Flames Applied ({currentDataset.Packs.Count(x => x.AllFlameApplied)})");
+            ImGui.TableSetupColumn(new StringBuilder().Append("MonsterType (H-").Append(currentDataset.Packs.Count(x => x.MonsterType == MonsterType.High)).Append(", N-")
+                    .Append(currentDataset.Packs.Count(x => x.MonsterType == MonsterType.Normal)).Append(", L-").Append(currentDataset.Packs.Count(x => x.MonsterType == MonsterType.Low))
+                    .Append(", VL-")
+                    .Append(currentDataset.Packs.Count(x => x.MonsterType == MonsterType.VeryLow)).Append(")").ToString(),
+                ImGuiTableColumnFlags.WidthStretch);
+
+            ImGui.TableHeadersRow();
+
+            var deletePackIndex = -1;
+            // Weighting column
             ImGui.TableNextColumn();
-
-            var usableSpace = ImGui.GetContentRegionAvail();
-            ImGui.SetNextItemWidth(usableSpace.X);
-
-            var reftDouble = pack.PackSizeModifier;
-            ImGui.InputDouble("", ref reftDouble);
-            if (!currentDataset.LockedData)
+            for (var i = 0; i < currentDataset.Packs.Count; i++)
             {
-                pack.PackSizeModifier = reftDouble;
-            }
+                ImGui.PushID($"{i}_packColumn");
+                var pack = currentDataset.Packs[i];
+                if (ImGui.Button("Delete") && !currentDataset.LockedData)
+                {
+                    deletePackIndex = i;
+                }
 
-            ImGui.TableNextColumn();
-
-            var enabled = "Wealthy           ";
-            var disabled = "Poor";
-            var label = pack.AllFlameApplied
-                ? enabled
-                : disabled.PadRight(enabled.Length);
-
-            if (ImGui.Button($"{label}") && !currentDataset.LockedData)
-            {
-                pack.AllFlameApplied = !pack.AllFlameApplied;
-            }
-
-            ImGui.TableNextColumn();
-
-            usableSpace = ImGui.GetContentRegionAvail();
-            ImGui.SetNextItemWidth(usableSpace.X);
-
-            var refPackType = (int)pack.MonsterType;
-
-            if (ImGui.Combo("##", ref refPackType, Enum.GetNames(typeof(MonsterType)), GetEnumLength<MonsterType>()) && !currentDataset.LockedData)
-            {
-                pack.MonsterType = (MonsterType)refPackType;
-            }
-
-            if (i < currentDataset.Packs.Count - 1)
-            {
                 ImGui.TableNextColumn();
+
+                var usableSpace = ImGui.GetContentRegionAvail();
+                ImGui.SetNextItemWidth(usableSpace.X);
+
+                var reftDouble = pack.PackSizeModifier;
+                ImGui.InputDouble("", ref reftDouble);
+                if (!currentDataset.LockedData)
+                {
+                    pack.PackSizeModifier = reftDouble;
+                }
+
+                ImGui.TableNextColumn();
+
+                var enabled = "Wealthy           ";
+                var disabled = "Poor";
+                var label = pack.AllFlameApplied
+                    ? enabled
+                    : disabled.PadRight(enabled.Length);
+
+                if (ImGui.Button($"{label}") && !currentDataset.LockedData)
+                {
+                    pack.AllFlameApplied = !pack.AllFlameApplied;
+                }
+
+                ImGui.TableNextColumn();
+
+                usableSpace = ImGui.GetContentRegionAvail();
+                ImGui.SetNextItemWidth(usableSpace.X);
+
+                var refPackType = (int)pack.MonsterType;
+
+                if (ImGui.Combo("##", ref refPackType, Enum.GetNames(typeof(MonsterType)), GetEnumLength<MonsterType>()) && !currentDataset.LockedData)
+                {
+                    pack.MonsterType = (MonsterType)refPackType;
+                }
+
+                if (i < currentDataset.Packs.Count - 1)
+                {
+                    ImGui.TableNextColumn();
+                }
+
+                ImGui.PopID();
             }
 
-            ImGui.PopID();
+            ImGui.EndTable();
+            if (deletePackIndex != -1)
+            {
+                currentDataset.Packs.RemoveAt(deletePackIndex);
+            }
         }
 
-        ImGui.EndTable();
-        if (deletePackIndex != -1)
-        {
-            currentDataset.Packs.RemoveAt(deletePackIndex);
-        }
-
-        return false;
+        ImGui.NewLine();
     }
 
     private void DrawValuesWidgets()
@@ -450,14 +555,6 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
         }
 
         ImGui.SetNextItemWidth(regionWidth);
-        var refInt = Settings.DataSets[Settings.LastSelectedIndex].TotalStrongboxes;
-        ImGui.InputInt("Strongboxes", ref refInt);
-        if (!Settings.DataSets[Settings.LastSelectedIndex].LockedData)
-        {
-            Settings.DataSets[Settings.LastSelectedIndex].TotalStrongboxes = refInt;
-        }
-
-        ImGui.SetNextItemWidth(regionWidth);
         var refDouble = Settings.DataSets[Settings.LastSelectedIndex].TotalHistoricalYield;
         ImGui.InputDouble("Total Historical Yield", ref refDouble);
         if (!Settings.DataSets[Settings.LastSelectedIndex].LockedData)
@@ -466,7 +563,7 @@ public class WealthyData : BaseSettingsPlugin<WealthyDataSettings>
         }
 
         ImGui.SetNextItemWidth(regionWidth);
-        refInt = Settings.DataSets[Settings.LastSelectedIndex].TotalChaos;
+        var refInt = Settings.DataSets[Settings.LastSelectedIndex].TotalChaos;
         ImGui.InputInt("Total Chaos", ref refInt);
         if (!Settings.DataSets[Settings.LastSelectedIndex].LockedData)
         {
